@@ -4,7 +4,7 @@
 
 WiFiUDP Logger::udp;
 
-void Logger::udpBroadcast(const char *message) {
+void Logger::udpSendBroadcast(const char *message) {
     if (!WiFi.isConnected()) return;
     if (udp.beginPacket(WiFi.broadcastIP(),UDP_BROADCAST_PORT)) {
         udp.print(message);
@@ -12,9 +12,20 @@ void Logger::udpBroadcast(const char *message) {
     }
 }
 
+void Logger::udpListen() {
+    if (!WiFi.isConnected()) return;
+    udp.begin(UDP_LISTEN_PORT);
+}
+
+String Logger::udpReceive() {
+    int bytes = udp.parsePacket();
+    if (bytes>0) return udp.readString();
+    else return String("");
+}
+
 void Logger::print(const char *message) {
     Serial.print(message);
-    udpBroadcast(message);
+    udpSendBroadcast(message);
     //ble_uart_send(message);
 }
 

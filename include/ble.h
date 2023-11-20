@@ -1,10 +1,7 @@
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-#include <BLE2902.h>
-#include <Arduino.h>
+#include <TinyGPS++.h>
 #include "gpsdata.h"
 
 void ble_setup();
-void ble_update(GPSData);
+void ble_update(GPSData *,TinyGPSPlus *);
 void ble_uart_send(const char *);
+void ble_stop();
