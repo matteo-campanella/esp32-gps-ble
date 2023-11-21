@@ -15,6 +15,7 @@ int no_location_update_counter = 0;
 double old_lat,old_lon;
 TaskHandle_t gpsTask;
 bool isModemSleepOn = false;
+bool isGPSLocked = false;
 
 bool wifi_connect() {
     const char *found_ssid = NULL;
@@ -44,6 +45,7 @@ bool wifi_connect() {
     if (found_ssid == NULL) {
         logger.println("No known WiFi found.");
         WiFi.mode(WIFI_OFF);
+        leds.setCommStatus(Leds::CommStatus::disconnected);
         return false;
     }
 
@@ -57,12 +59,13 @@ bool wifi_connect() {
     if (tries == 0) {
         logger.println("Failed to connect to WiFi!");
         WiFi.mode(WIFI_OFF);
+        leds.setCommStatus(Leds::CommStatus::disconnected);
         return false;
     }
     
     logger.print("IP: ");
     logger.println(WiFi.localIP().toString().c_str());
-
+    leds.setCommStatus(Leds::CommStatus::connected);
     logger.print("NET-");
     return true;
 }
@@ -101,19 +104,30 @@ void manageGPS(void * pvParameters) {
         if ((now-last) < GPS_TICK_INTERVAL) continue;
         last=now;
 
+        if (gps.hdop.isValid() && gps.hdop.hdop() < MAX_HDOP) {
+            isGPSLocked=true;
+            leds.setGPSStatus(Leds::GpsStatus::locked);
+        }
+        else {
+            isGPSLocked=false;
+            leds.setGPSStatus(Leds::GpsStatus::searching);
+        }
+
         if (gps.speed.isValid() && gps.speed.isUpdated()) {
             data.speed=gps.speed.kmph();
             data.min_speed=data.speed<data.min_speed?data.speed:data.min_speed;
             data.max_speed=data.speed>data.max_speed?data.speed:data.max_speed;
-            if (data.speed > SLEEP_TRIGGER_SPEED ) {
-                sleep_speed_counter++;
-                wake_speed_counter=0;
-                logger.println("S");
-            }
-            else {
-                wake_speed_counter++;
-                sleep_speed_counter=0;
-                logger.println("W");
+            if (isGPSLocked) {
+                if (data.speed > SLEEP_TRIGGER_SPEED) {
+                    sleep_speed_counter++;
+                    wake_speed_counter=0;
+                    logger.println("S");
+                }
+                else {
+                    wake_speed_counter++;
+                    sleep_speed_counter=0;
+                    logger.println("W");
+                }
             }
         }
         if (gps.altitude.isValid() && gps.altitude.isUpdated()) {
@@ -162,31 +176,35 @@ void manageGPS(void * pvParameters) {
 
             if (gps.location.isValid() && gps.location.isUpdated()) {
                 char record[80];
-                snprintf(record, sizeof(record), TIMESTAMP_FORMAT ";%.6f;%.6f;%.2f;%.2f;%d",
+                snprintf(record, sizeof(record), TIMESTAMP_FORMAT ";%.6f;%.6f;%.2f;%.2f;%.2f;%d",
                         TIMESTAMP_ARGS,
-                        gps.location.lat(), gps.location.lng(), gps.altitude.meters(), gps.speed.kmph(), gps.satellites.value());
+                        gps.location.lat(), gps.location.lng(), gps.altitude.meters(), gps.speed.kmph(), gps.hdop.hdop(), gps.satellites.value());
                 logger.println(record);
             }
 
             ble_update(&data,&gps);
 
-            if (sleep_speed_counter > SLEEP_TRIGGER_COUNT && !isModemSleepOn) {
+            if (sleep_speed_counter > SLEEP_TRIGGER_COUNT) {
                 sleep_speed_counter = 0;
                 wake_speed_counter = 0;
-
-                logger.println("Entering Modem Sleep Mode");
-                //delay(1000);
-                // ble_stop();
-                // WiFi.disconnect();
-                // WiFi.mode(WIFI_OFF);
-                // btStop();
-                // esp_bt_controller_disable();
-                isModemSleepOn = true;
+                if(!isModemSleepOn) {
+                    logger.println("Entering Modem Sleep Mode");
+                    //delay(1000);
+                    // ble_stop();
+                    // WiFi.disconnect();
+                    // WiFi.mode(WIFI_OFF);
+                    // btStop();
+                    // esp_bt_controller_disable();
+                    isModemSleepOn = true;
+                }
             }
-            if (wake_speed_counter > WAKE_TRIGGER_COUNT && isModemSleepOn) {
+            if (wake_speed_counter > WAKE_TRIGGER_COUNT) {
                 sleep_speed_counter = 0;
-                wake_speed_counter = 0;  
-                logger.println("Exiting Modem Sleep Mode");
+                wake_speed_counter = 0;
+                if (isModemSleepOn) {  
+                    logger.println("Exiting Modem Sleep Mode");
+                    isModemSleepOn = false;
+                }
             }
         }
     }

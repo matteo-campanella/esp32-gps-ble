@@ -14,11 +14,12 @@ BLEServer* pServer = NULL;
 BLECharacteristic* pLocCharacteristic = NULL;
 BLECharacteristic* pSpeedCharacteristic = NULL;
 BLECharacteristic* pAltCharacteristic = NULL;
-BLECharacteristic *pTxCharacteristic;
+BLECharacteristic *pTxCharacteristic, *pRxCharacteristic;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
 uint32_t value = 0;
 CircularBuffer<byte,512> buffer;
+char outBuffer[80];
 
 extern Logger logger;
 
@@ -66,7 +67,7 @@ void ble_setup() {
 										BLECharacteristic::PROPERTY_NOTIFY
 									);
   pTxCharacteristic->addDescriptor(new BLE2902());
-  BLECharacteristic * pRxCharacteristic = pUARTService->createCharacteristic(
+  pRxCharacteristic = pUARTService->createCharacteristic(
 											UART_CHARACTERISTIC_UUID_RX,
 											BLECharacteristic::PROPERTY_WRITE
 										);
@@ -90,7 +91,7 @@ void ble_setup() {
   pSpeedCharacteristic->addDescriptor(new BLE2902());
 
   pAltCharacteristic = pGpsService->createCharacteristic(
-                      SPD_CHARACTERISTIC_UUID,
+                      ALT_CHARACTERISTIC_UUID,
                       BLECharacteristic::PROPERTY_READ   |
                       BLECharacteristic::PROPERTY_NOTIFY
                     );
@@ -116,17 +117,24 @@ unsigned int ble_uart_receive(char *b) {
 
 void ble_update(GPSData *data, TinyGPSPlus *gps) {
     if (deviceConnected) {
-      if (gps->location.isValid() && gps->location.isUpdated()) {
-        pLocCharacteristic->setValue(std::to_string(gps->location.lat())+","+std::to_string(gps->location.lng()));
+      if (gps->location.isValid()) {
+        snprintf(outBuffer, sizeof(outBuffer), "%.3f;%.3f;%.2f;%d",
+          gps->location.lat(), gps->location.lng(), gps->hdop.hdop(), gps->satellites.value());
+        pLocCharacteristic->setValue(outBuffer);
         pLocCharacteristic->notify();
+        delay(10);
       }
-      if (gps->speed.isValid() && gps->speed.isUpdated()) {
-        pLocCharacteristic->setValue(std::to_string(data->min_speed)+","+std::to_string(data->speed)+","+std::to_string(data->max_speed));
-        pLocCharacteristic->notify();        
+      if (gps->speed.isValid()) {
+        snprintf(outBuffer, sizeof(outBuffer),"%.2f;%.2f;%.2f",data->min_speed,data->speed,data->max_speed);
+        pSpeedCharacteristic->setValue(outBuffer);
+        pSpeedCharacteristic->notify(); 
+        delay(10); 
       }
-      if (gps->altitude.isValid() && gps->altitude.isUpdated()) {
-        pLocCharacteristic->setValue(std::to_string(data->min_alt)+","+std::to_string(data->alt)+","+std::to_string(data->max_alt));
-        pLocCharacteristic->notify(); 
+      if (gps->altitude.isValid()) {
+        snprintf(outBuffer, sizeof(outBuffer),"%.2f;%.2f;%.2f",data->min_alt,data->alt,data->max_alt);
+        pAltCharacteristic->setValue(outBuffer);
+        pAltCharacteristic->notify();
+        delay(10);
       }
     }
     // disconnecting

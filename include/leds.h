@@ -1,7 +1,7 @@
 #include <Arduino.h>
 
-#define RED_LED 23
-#define GREEN_LED 22
+#define RED_LED 22
+#define GREEN_LED 23
 
 class Leds{
     private:
