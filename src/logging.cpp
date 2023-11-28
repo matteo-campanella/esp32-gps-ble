@@ -2,6 +2,8 @@
 #include "ble.h"
 #include <Arduino.h>
 
+extern bool isModemSleepOn;
+
 WiFiUDP Logger::udp;
 
 void Logger::udpSendBroadcast(const char *message) {
@@ -18,15 +20,19 @@ void Logger::udpListen() {
 }
 
 String Logger::udpReceive() {
-    int bytes = udp.parsePacket();
-    if (bytes>0) return udp.readString();
-    else return String("");
+    if (WiFi.isConnected()) {
+        int bytes = udp.parsePacket();
+        if (bytes>0) return udp.readString();
+    }
+    return String("");
 }
 
 void Logger::print(const char *message) {
     Serial.print(message);
-    udpSendBroadcast(message);
-    //ble_uart_send(message);
+    if (!isModemSleepOn) {
+        udpSendBroadcast(message);
+        ble_uart_send(message);
+    }
 }
 
 void Logger::printf(const char *message, ...) {

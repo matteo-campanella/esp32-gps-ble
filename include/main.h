@@ -14,5 +14,7 @@
 #define TIMESTAMP_ARGS gps.date.year(), gps.date.month(), gps.date.day(), gps.time.hour(), gps.time.minute(), gps.time.second()
 #define SLEEP_TRIGGER_SPEED 4
 #define SLEEP_TRIGGER_COUNT 10
-#define WAKE_TRIGGER_COUNT 10
+#define WAKE_TRIGGER_COUNT 30
 #define MAX_HDOP 2.0
+#define BUS_RX 34
+#define BUS_TX 35
