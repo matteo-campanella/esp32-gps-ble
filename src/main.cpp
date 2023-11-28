@@ -16,6 +16,8 @@ double old_lat,old_lon;
 TaskHandle_t gpsTask,feedGpsTask;
 bool isModemSleepOn = false;
 bool isGPSLocked = false;
+bool isGoToSleep = false;
+bool isWakeUp = false;
 String command;
 
 void wifi_off() {
@@ -113,6 +115,7 @@ void check_incoming_commands() {
     } 
     else if (command == "s" || command == "sleep") {
         logger.println("Entering Modem Sleep...");
+        data.max_alt = 9876;
         modem_sleep();
     }   
     else if (command == "u" || command == "upload") {
@@ -131,6 +134,7 @@ void manageGPS(void * pvParameters) {
 
     for(;;) {
         unsigned long now = millis();
+        delay(50);
         if ((now-last) < GPS_TICK_INTERVAL) continue;
         last=now;
 
@@ -149,22 +153,20 @@ void manageGPS(void * pvParameters) {
             leds.gpsStatus=Leds::GPSSTATUS::searching;
         }
 
-        if (gps.speed.isValid() && isSpeedUpdated) {
+        if (gps.speed.isValid() && isSpeedUpdated && isGPSLocked) {
             data.speed=gps.speed.kmph();
             data.min_speed=data.speed<data.min_speed?data.speed:data.min_speed;
             data.max_speed=data.speed>data.max_speed?data.speed:data.max_speed;
-            if (isGPSLocked) {
-                if (data.speed > SLEEP_TRIGGER_SPEED) {
-                    sleep_speed_counter++;
-                    wake_speed_counter=0;
-                }
-                else {
-                    wake_speed_counter++;
-                    sleep_speed_counter=0;
-                }
+            if (data.speed > SLEEP_TRIGGER_SPEED) {
+                sleep_speed_counter++;
+                wake_speed_counter=0;
+            }
+            else {
+                wake_speed_counter++;
+                sleep_speed_counter=0;
             }
         }
-        if (gps.altitude.isValid() && isAltUpdated) {
+        if (gps.altitude.isValid() && isAltUpdated && isGPSLocked) {
             data.alt=gps.altitude.meters();
             data.min_alt=data.alt<data.min_alt?data.alt:data.min_alt;
             data.max_alt=data.alt>data.max_alt?data.alt:data.max_alt;
@@ -227,17 +229,17 @@ void manageGPS(void * pvParameters) {
             if (sleep_speed_counter > SLEEP_TRIGGER_COUNT) {
                 sleep_speed_counter = 0;
                 wake_speed_counter = 0;
-                if(!isModemSleepOn) {
+                if(!isModemSleepOn && !isGoToSleep) {
                     logger.println("Entering Modem Sleep Mode");
-                    modem_sleep();
+                    isGoToSleep = true;
                 }
             }
             if (wake_speed_counter > WAKE_TRIGGER_COUNT) {
                 sleep_speed_counter = 0;
                 wake_speed_counter = 0;
-                if (isModemSleepOn) {  
+                if (isModemSleepOn && !isWakeUp) {  
                     logger.println("Exiting Modem Sleep Mode");
-                    modem_awake();
+                    isWakeUp = true;
                 }
             }
         }
@@ -275,14 +277,15 @@ void bus_setup() {
     pinMode(BUS_RX,INPUT);
     pinMode(BUS_TX,INPUT);
     logger.print("BUS-");
+    esp_cpu_
 }
 
 void setup() {
     ota_setup();
+    wifi_setup();    
     leds.setup();
     bus_setup();
     ble_setup();
-    wifi_setup();
     gps_setup();
     //logger.udpListen();
     logger.println("UP");
@@ -290,4 +293,12 @@ void setup() {
 
 void loop() {
     check_incoming_commands();
+    if (isGoToSleep) {
+        modem_sleep();
+        isGoToSleep = false;
+    }
+    if (isWakeUp) {
+        modem_awake();
+        isWakeUp = false;
+    }
 }
