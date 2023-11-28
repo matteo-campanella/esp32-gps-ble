@@ -277,7 +277,6 @@ void bus_setup() {
     pinMode(BUS_RX,INPUT);
     pinMode(BUS_TX,INPUT);
     logger.print("BUS-");
-    esp_cpu_
 }
 
 void setup() {
